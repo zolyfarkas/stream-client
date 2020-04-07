@@ -46,6 +46,7 @@ public class DefaultCameraStreamer implements Closeable {
 
   DefaultCameraStreamer(final JPanel playPanel,
           final String publishUrl, Resolution res) throws VideoCaptureException, IOException, InterruptedException {
+    playPanel.paint(playPanel.getGraphics());
     List<Device> videoDevices = VideoCapture.getVideoDevices();
     System.out.println(videoDevices);
     Rational framerate = Rational.make(1, 25);
@@ -104,7 +105,9 @@ public class DefaultCameraStreamer implements Closeable {
       // We are going to use 420P as the format because that's what most video formats these days use
       final PixelFormat.Type pixelformat = PixelFormat.Type.PIX_FMT_YUV420P;
       encoder.setPixelFormat(pixelformat);
-      encoder.setTimeBase(framerate);
+      Rational timeBase = Rational.make(1, 25);
+
+      encoder.setTimeBase(timeBase);
 
       /**
        * An annoyance of some formats is that they need global (rather than per-stream) headers, and in that case you
@@ -126,7 +129,6 @@ public class DefaultCameraStreamer implements Closeable {
       muxer.addNewStream(encoder);
 
       muxer.open(null, null);
-      Rational timeBase = Rational.make(1, 90000);
       this.packet = MediaPacket.make();
       this.processor = new CannyEdgeDetector();
       this.picFactory = () -> {
@@ -163,14 +165,14 @@ public class DefaultCameraStreamer implements Closeable {
       } else {
         f = ImageUtilities.createBufferedImageForDisplay(frame, f);
       }
-       RingBuffer<MediaPicture> ringBuffer = disruptor.getRingBuffer();
-       long sequence = ringBuffer.next();  // Grab the next sequence
-        try {
-          MediaPicture picture = ringBuffer.get(sequence);
-          converter.toPicture(picture, f, (System.nanoTime() - videoEpoch) / 9000);
-        } finally {
-          ringBuffer.publish(sequence);
-        }
+      RingBuffer<MediaPicture> ringBuffer = disruptor.getRingBuffer();
+      long sequence = ringBuffer.next();  // Grab the next sequence
+      try {
+        MediaPicture picture = ringBuffer.get(sequence);
+        converter.toPicture(picture, f, (System.nanoTime() - videoEpoch) * 25 / 1000000000);
+      } finally {
+        ringBuffer.publish(sequence);
+      }
     }
 
     public void afterUpdate(VideoDisplay<MBFImage> display) {
