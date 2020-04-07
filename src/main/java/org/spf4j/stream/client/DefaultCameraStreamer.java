@@ -78,7 +78,7 @@ public class DefaultCameraStreamer implements Closeable {
     private final Muxer muxer;
     private MediaPictureConverter converter;
     private BufferedImage f;
-    private long microTime = 0;
+    private final long videoEpoch = System.nanoTime();
     private final SinglebandImageProcessor<Float, FImage> processor;
     private final Disruptor<MediaPicture> disruptor;
     private final EventFactory<MediaPicture> picFactory;
@@ -126,7 +126,7 @@ public class DefaultCameraStreamer implements Closeable {
       muxer.addNewStream(encoder);
 
       muxer.open(null, null);
-
+      Rational timeBase = Rational.make(1, 90000);
       this.packet = MediaPacket.make();
       this.processor = new CannyEdgeDetector();
       this.picFactory = () -> {
@@ -134,7 +134,7 @@ public class DefaultCameraStreamer implements Closeable {
                 encoder.getWidth(),
                 encoder.getHeight(),
                 pixelformat);
-        picture.setTimeBase(framerate);
+        picture.setTimeBase(timeBase);
         return picture;
       };
       this.disruptor = new Disruptor<>(picFactory, 64, DaemonThreadFactory.INSTANCE, ProducerType.SINGLE,
@@ -166,9 +166,8 @@ public class DefaultCameraStreamer implements Closeable {
        RingBuffer<MediaPicture> ringBuffer = disruptor.getRingBuffer();
        long sequence = ringBuffer.next();  // Grab the next sequence
         try {
-            MediaPicture picture = ringBuffer.get(sequence);
-            converter.toPicture(picture, f, microTime++);
-
+          MediaPicture picture = ringBuffer.get(sequence);
+          converter.toPicture(picture, f, (System.nanoTime() - videoEpoch) / 9000);
         } finally {
           ringBuffer.publish(sequence);
         }
